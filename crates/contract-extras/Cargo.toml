@@ -1,0 +1,19 @@
+[package]
+name = "veles-casper-contract-extras"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+base64 = { version = "0.22.1", default-features = false, features = ["alloc"] }
+hex = { version = "0.4.3", default-features = false }
+serde = { version = "1.0.228", default-features = false }
+serde_json = { version = "1.0.145", default-features = false }
+veles-casper-contract-api = { workspace = true }
+
+[features]
+default = []
+as_dependency = ["veles-casper-contract-api/as_dependency"]

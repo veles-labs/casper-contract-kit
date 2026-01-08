@@ -1,0 +1,20 @@
+[package]
+name = "do-nothing-caller"
+version = "0.1.0"
+authors = ["Michał Papierski <michal@papierski.net>"]
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+veles-casper-contract-api = { workspace = true }
+do-nothing-stored = { path = "../do-nothing-stored", features = ["as_dependency"] }
+
+
+[features]
+default = ["veles-casper-contract-api/wasm_allocator", "veles-casper-contract-api/wasm_panic_handler"]
+std = ["veles-casper-contract-api/std"]
+as_dependency = ["veles-casper-contract-api/as_dependency"]

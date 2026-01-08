@@ -1,0 +1,20 @@
+[package]
+name = "veles-casper-contract-macros"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1.0"
+quote = "1.0"
+syn = { version = "2.0", features = ["full", "extra-traits"] }
+casper-types = { workspace = true }
+blake2-rfc = "0.2.18"
+paste = "1.0.15"
+
+[features]
+default = []
+as_dependency = []

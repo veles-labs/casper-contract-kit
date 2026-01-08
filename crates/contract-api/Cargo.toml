@@ -1,0 +1,37 @@
+[package]
+name = "veles-casper-contract-api"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+
+[dependencies]
+veles-casper-contract-macros = { workspace = true }
+lol_alloc =  { version = "0.4.1", optional = true }
+casper-contract = { workspace = true }
+casper-types = { workspace = true }
+casper-event-standard = { workspace = true, default-features = false }
+static_assertions = "1.1.0"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+veles-casper-ffi-shim = { workspace = true }
+casper-engine-test-support = { workspace = true }
+casper-execution-engine = { workspace = true }
+casper-storage = { workspace = true }
+casper-client = { workspace = true }
+casper-binary-port = { workspace = true }
+tokio = "1.48.0"
+thiserror = "2"
+toml = "0.9"
+tempfile = "3"
+secrecy = "0.10"
+
+[features]
+default = ["wasm_allocator", "wasm_panic_handler"]
+as_dependency = ["veles-casper-contract-macros/as_dependency"]
+std = ["casper-types/std"]
+json-schema = ["casper-types/json-schema"]
+wasm_allocator = ["lol_alloc"]
+wasm_panic_handler = []
+
+[dev-dependencies]
+proptest = "1.4"

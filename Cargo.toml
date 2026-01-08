@@ -1,0 +1,20 @@
+[workspace]
+members = [
+    "crates/*",
+    "examples/*",
+    "xtask",
+]
+resolver = "3"
+
+[workspace.dependencies]
+casper-binary-port = "1.1.1"
+casper-client = "5.0.0"
+casper-contract = { version = "5.1.1", default-features = false }
+casper-engine-test-support = { version = "8.1.1" }
+casper-event-standard = { version = "0.7.0", default-features = false }
+casper-execution-engine = { version = "8.1.1" }
+casper-storage = { version = "2.1.1" }
+casper-types = { version = "6.0.1" }
+veles-casper-contract-api = { path = "crates/contract-api" }
+veles-casper-contract-macros = { path = "crates/contract-macros" }
+veles-casper-ffi-shim = { path = "crates/casper-ffi-shim" }

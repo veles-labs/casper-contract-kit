@@ -1,0 +1,10 @@
+[package]
+name = "veles-casper-ffi-shim"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+
+[dependencies]
+casper-types = { workspace = true }
+casper-execution-engine = { workspace = true }
+keccak-asm = "0.1.4"

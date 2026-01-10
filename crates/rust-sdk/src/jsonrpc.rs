@@ -1,3 +1,4 @@
+//! JSONRPC client for interacting with a Casper network.
 use std::{
     convert::TryInto,
     fs,
@@ -5,29 +6,31 @@ use std::{
 };
 
 use casper_client::{
-    self, JsonRpcId, Verbosity,
-    cli::TransactionV1BuilderError,
-    keygen,
+    self, JsonRpcId, Verbosity, keygen,
     rpcs::{
         AccountIdentifier,
-        results::{
-            GetAccountResult, GetChainspecResult, GetStateRootHashResult, GetTransactionResult,
-            PutTransactionResult, SpeculativeExecTxnResult,
-        },
+        results::{GetChainspecResult, GetStateRootHashResult},
     },
 };
-use casper_types::{AsymmetricType, TransactionHash};
-use casper_types::{
-    Digest, PricingMode, PublicKey, RuntimeArgs, Transaction, TransactionRuntimeParams,
-    crypto::ErrorExt,
+pub use casper_client::{
+    Error as CasperClientRpcError,
+    cli::TransactionV1BuilderError,
+    rpcs::results::{
+        GetAccountResult, GetBlockResult, GetTransactionResult, PutTransactionResult,
+        SpeculativeExecTxnResult,
+    },
 };
+
+use casper_types::crypto::ErrorExt;
+use casper_types::{AsymmetricType, TransactionHash};
+pub use casper_types::{Digest, PublicKey, Transaction, account::AccountHash};
 use secrecy::SecretBox;
 use thiserror::Error;
 use toml::Value as TomlValue;
 
 static RPC_COUNTER: AtomicI64 = AtomicI64::new(1);
 
-/// Shared RPC client wrapper for host-side tools (agent, xtask, etc).
+/// JSONRPC client for interacting with a Casper network sidecar instance.
 #[derive(Clone, Debug)]
 pub struct CasperClient {
     network_name: String,
@@ -98,7 +101,7 @@ impl CasperClient {
         .await
         {
             Ok(response) => Ok(Some(response.result)),
-            Err(casper_client::Error::ResponseIsRpcError { error, .. })
+            Err(CasperClientRpcError::ResponseIsRpcError { error, .. })
                 if is_missing_account_error(error.code, &error.message) =>
             {
                 Ok(None)
@@ -117,12 +120,12 @@ impl CasperClient {
         )
         .await?;
 
-        extract_state_root(&response.result)
-    }
-
-    /// Returns the latest state root hash as a lowercase hex string.
-    pub async fn get_state_root_hash_hex(&self) -> Result<String, CasperClientError> {
-        Ok(self.get_state_root_hash().await?.to_string())
+        {
+            let result: &GetStateRootHashResult = &response.result;
+            result
+                .state_root_hash
+                .ok_or(CasperClientError::MissingStateRootHash)
+        }
     }
 
     /// Returns the balance (in motes) for the provided public key, if the account exists.
@@ -186,6 +189,8 @@ impl CasperClient {
     }
 
     /// Downloads and parses the chainspec TOML as `toml::Value`.
+    ///
+    /// NOTE: This API may change in future and provide a deserialized `Chainspec` struct instead.
     pub async fn get_chainspec(&self) -> Result<TomlValue, CasperClientError> {
         let response =
             casper_client::get_chainspec(next_rpc_id(), self.rpc_endpoint(), self.verbosity)
@@ -205,16 +210,21 @@ impl CasperClient {
     }
 
     /// Generates a new Secp256k1 secret key and returns its PEM contents.
-    pub fn keygen() -> Result<SecretBox<String>, CasperClientError> {
-        let tempdir = tempfile::tempdir()?;
-        let dir = tempdir.path().to_string_lossy();
+    pub async fn keygen() -> Result<SecretBox<str>, CasperClientError> {
+        tokio::task::spawn_blocking(|| {
+            let tempdir = tempfile::tempdir()?;
+            let dir = tempdir.path().to_string_lossy();
 
-        keygen::generate_files(&dir, keygen::SECP256K1, true)?;
+            keygen::generate_files(&dir, keygen::SECP256K1, true)?;
 
-        let secret_key_path = tempdir.path().join(keygen::SECRET_KEY_PEM);
-        let secret = fs::read_to_string(&secret_key_path)?;
+            let secret_key_path = tempdir.path().join(keygen::SECRET_KEY_PEM);
+            let secret = fs::read_to_string(&secret_key_path)?;
 
-        Ok(SecretBox::new(Box::new(secret)))
+            let secret_box = SecretBox::new(secret.into_boxed_str());
+
+            Ok(secret_box)
+        })
+        .await?
     }
 
     /// Fetches the transaction details for the provided transaction hash.
@@ -233,6 +243,7 @@ impl CasperClient {
         Ok(response.result)
     }
 
+    /// Performs a speculative execution of the provided transaction.
     pub async fn speculative_exec_txn(
         &self,
         transaction: Transaction,
@@ -247,61 +258,11 @@ impl CasperClient {
         Ok(response.result)
     }
 
-    pub async fn get_block(
-        &self,
-    ) -> Result<casper_client::rpcs::results::GetBlockResult, CasperClientError> {
+    pub async fn get_block(&self) -> Result<GetBlockResult, CasperClientError> {
         let response =
             casper_client::get_block(next_rpc_id(), self.rpc_endpoint(), self.verbosity, None)
                 .await?;
         Ok(response.result)
-    }
-}
-
-/// Options for constructing session transactions.
-#[derive(Debug, Clone)]
-pub struct SessionOptions {
-    pub pricing: SessionPricing,
-    pub install_upgrade: bool,
-    pub runtime: TransactionRuntimeParams,
-    pub runtime_args: Option<RuntimeArgs>,
-}
-
-impl Default for SessionOptions {
-    fn default() -> Self {
-        Self {
-            pricing: SessionPricing::default(),
-            install_upgrade: true,
-            runtime: TransactionRuntimeParams::VmCasperV1,
-            runtime_args: None,
-        }
-    }
-}
-
-/// Pricing configuration for session transactions.
-#[derive(Debug, Clone, Copy)]
-pub struct SessionPricing {
-    pub payment_amount: u64,
-    pub gas_price_tolerance: u8,
-    pub standard_payment: bool,
-}
-
-impl Default for SessionPricing {
-    fn default() -> Self {
-        Self {
-            payment_amount: 750_000_000_000,
-            gas_price_tolerance: 1,
-            standard_payment: true,
-        }
-    }
-}
-
-impl From<SessionPricing> for PricingMode {
-    fn from(value: SessionPricing) -> Self {
-        PricingMode::PaymentLimited {
-            payment_amount: value.payment_amount,
-            gas_price_tolerance: value.gas_price_tolerance,
-            standard_payment: value.standard_payment,
-        }
     }
 }
 
@@ -310,7 +271,7 @@ pub enum CasperClientError {
     #[error("no RPC endpoints configured")]
     MissingRpcEndpoints,
     #[error("casper client error: {0}")]
-    Client(Box<casper_client::Error>),
+    Client(Box<CasperClientRpcError>),
     #[error("failed to parse chainspec response: {0}")]
     Chainspec(#[from] toml::de::Error),
     #[error("balance value exceeds u64 range")]
@@ -324,7 +285,9 @@ pub enum CasperClientError {
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
     #[error("transaction builder error: {0}")]
-    TransactionBuild(TransactionV1BuilderError),
+    TransactionBuild(#[from] TransactionV1BuilderError),
+    #[error("blocking task error: {0}")]
+    TaskJoin(#[from] tokio::task::JoinError),
     #[error("failed to parse public key `{input}`: {source}")]
     InvalidPublicKey {
         input: String,
@@ -332,31 +295,23 @@ pub enum CasperClientError {
     },
 }
 
-impl From<casper_client::Error> for CasperClientError {
-    fn from(value: casper_client::Error) -> Self {
+impl From<CasperClientRpcError> for CasperClientError {
+    fn from(value: CasperClientRpcError) -> Self {
         Self::Client(Box::new(value))
     }
 }
-impl From<TransactionV1BuilderError> for CasperClientError {
-    fn from(value: TransactionV1BuilderError) -> Self {
-        Self::TransactionBuild(value)
-    }
-}
 
+/// Generates the next JSONRPC ID.
 fn next_rpc_id() -> JsonRpcId {
     JsonRpcId::from(RPC_COUNTER.fetch_add(1, Ordering::Relaxed))
 }
 
-fn extract_state_root(result: &GetStateRootHashResult) -> Result<Digest, CasperClientError> {
-    result
-        .state_root_hash
-        .ok_or(CasperClientError::MissingStateRootHash)
-}
-
+/// Parses the chainspec TOML from the RPC result.
 fn parse_chainspec(result: &GetChainspecResult) -> Result<TomlValue, CasperClientError> {
     toml::de::from_slice(result.chainspec_bytes.chainspec_bytes()).map_err(Into::into)
 }
 
+/// Normalizes a node address by removing trailing slashes and `/rpc` suffixes.
 fn normalize_node_address(endpoint: &str) -> Option<String> {
     let trimmed = endpoint.trim();
     if trimmed.is_empty() {
@@ -377,6 +332,9 @@ fn normalize_node_address(endpoint: &str) -> Option<String> {
     }
 }
 
+/// Determines if the provided error code and message indicate a missing account.
+///
+/// Kind of hacky, but may be improved in the future with better error codes from the node.
 fn is_missing_account_error(code: i64, message: &str) -> bool {
     const ACCOUNT_NOT_FOUND_CODE: i64 = -32075;
 
@@ -390,4 +348,138 @@ fn is_missing_account_error(code: i64, message: &str) -> bool {
         || message.contains("no such account")
         || message.contains("does not exist")
         || message.contains("missing")
+}
+#[cfg(test)]
+mod tests {
+    use secrecy::ExposeSecret;
+
+    use super::*;
+
+    #[test]
+    fn test_next_rpc_id_increments() {
+        let id1 = next_rpc_id();
+        let id2 = next_rpc_id();
+        let id3 = next_rpc_id();
+
+        // IDs should be sequential
+        assert!(matches!(id1, JsonRpcId::Number(_)));
+        assert!(matches!(id2, JsonRpcId::Number(_)));
+        assert!(matches!(id3, JsonRpcId::Number(_)));
+    }
+
+    #[test]
+    fn test_normalize_node_address_empty() {
+        assert_eq!(normalize_node_address(""), None);
+        assert_eq!(normalize_node_address("   "), None);
+    }
+
+    #[test]
+    fn test_normalize_node_address_trailing_slash() {
+        assert_eq!(
+            normalize_node_address("http://localhost:11101/"),
+            Some("http://localhost:11101".to_string())
+        );
+    }
+
+    #[test]
+    fn test_normalize_node_address_rpc_suffix() {
+        assert_eq!(
+            normalize_node_address("http://localhost:11101/rpc"),
+            Some("http://localhost:11101".to_string())
+        );
+        assert_eq!(
+            normalize_node_address("http://localhost:11101/rpc/"),
+            Some("http://localhost:11101".to_string())
+        );
+    }
+
+    #[test]
+    fn test_normalize_node_address_clean() {
+        assert_eq!(
+            normalize_node_address("http://localhost:11101"),
+            Some("http://localhost:11101".to_string())
+        );
+    }
+
+    #[test]
+    fn test_normalize_node_address_only_rpc() {
+        assert_eq!(normalize_node_address("/rpc"), None);
+        assert_eq!(normalize_node_address("rpc"), Some("rpc".into()));
+    }
+
+    #[test]
+    fn test_is_missing_account_error_code() {
+        assert!(is_missing_account_error(-32075, ""));
+        assert!(!is_missing_account_error(-32076, ""));
+    }
+
+    #[test]
+    fn test_is_missing_account_error_message() {
+        assert!(is_missing_account_error(0, "Failed to get account"));
+        assert!(is_missing_account_error(0, "Account not found"));
+        assert!(is_missing_account_error(0, "No such account"));
+        assert!(is_missing_account_error(0, "does not exist"));
+        assert!(is_missing_account_error(0, "missing account"));
+        assert!(is_missing_account_error(0, "ACCOUNT NOT FOUND"));
+        assert!(!is_missing_account_error(0, "other error"));
+    }
+
+    #[test]
+    fn test_casper_client_new_empty_endpoints() {
+        let result = CasperClient::new("testnet", Vec::<String>::new());
+        assert!(matches!(
+            result,
+            Err(CasperClientError::MissingRpcEndpoints)
+        ));
+    }
+
+    #[test]
+    fn test_casper_client_new_filters_empty() {
+        let result = CasperClient::new("testnet", vec!["", "  ", "/rpc"]);
+        assert!(matches!(
+            result,
+            Err(CasperClientError::MissingRpcEndpoints)
+        ));
+    }
+
+    #[test]
+    fn test_casper_client_new_success() {
+        let client = CasperClient::new("testnet", vec!["http://localhost:11101"])
+            .expect("should create client");
+        assert_eq!(client.network_name(), "testnet");
+        assert_eq!(client.rpc_endpoint(), "http://localhost:11101");
+    }
+
+    #[test]
+    fn test_casper_client_new_normalizes_endpoints() {
+        let client = CasperClient::new(
+            "testnet",
+            vec!["http://localhost:11101/rpc/", "http://other:8888/", ""],
+        )
+        .expect("should create client");
+        assert_eq!(client.rpc_endpoint(), "http://localhost:11101");
+    }
+
+    #[test]
+    fn test_casper_client_error_display() {
+        let error = CasperClientError::MissingRpcEndpoints;
+        assert_eq!(error.to_string(), "no RPC endpoints configured");
+
+        let error = CasperClientError::BalanceOverflow;
+        assert_eq!(error.to_string(), "balance value exceeds u64 range");
+
+        let error = CasperClientError::MissingStateRootHash;
+        assert_eq!(error.to_string(), "missing state root hash in response");
+
+        let error = CasperClientError::MissingNetworkName;
+        assert_eq!(error.to_string(), "missing network name in chainspec");
+    }
+
+    #[tokio::test]
+    async fn test_casper_client_keygen() {
+        let secret_box = CasperClient::keygen().await.expect("keygen should succeed");
+        let secret = secret_box.expose_secret();
+        assert!(secret.starts_with("-----BEGIN EC PRIVATE KEY-----"));
+        assert!(secret.ends_with("-----END EC PRIVATE KEY-----\r\n"));
+    }
 }

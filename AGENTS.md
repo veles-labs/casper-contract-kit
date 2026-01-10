@@ -4,6 +4,7 @@
 
 - `cargo xtask build-example <package>` builds a single example contract to `wasm32v1-none` in release mode.
 - `cargo xtask build-examples` builds all example contracts under `./examples` to `wasm32v1-none` in release mode.
+- `cargo check --examples` to ensure examples compile when modifying or adding them.
 - `cargo clippy --all --all-targets --all-features` for workspace linting.
 - `cargo test -p veles-casper-contract-api --tests` runs contract-api unit tests.
 
@@ -15,5 +16,6 @@
 
 ## Repo Layout Notes
 - `crates/` contains core libraries (e.g., `contract-api`, `contract-extras`, `contract-macros`, `casper-ffi-shim`).
+- When adding/removing crates, update the `Crates` section in `README.md` to keep the list and descriptions in sync.
 - `examples/` contains deployable contract examples (built via `cargo xtask`).
 - `xtask/` provides the task runner used by `cargo xtask`.

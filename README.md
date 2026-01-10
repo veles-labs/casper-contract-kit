@@ -24,13 +24,14 @@ Unlike some smart contract development tools, it does not force a particular cod
 - State helpers: `NamedKey`, `TypedURef`, `len_prefixed!`, dictionary read/write helpers, base128 dictionary keys, immediate caller/entity access.
 - High-level collections on dictionaries (`Mapping`, `Set`, `Vector`) plus dictionary-key helpers.
 - Events/messages: `CasperMessage` derive + `emit_message` helper.
-- Host-side support (non-Wasm): `casper-ffi-shim`, test support, and an `sdk` wrapper around `casper-client` (std only).
+- Host-side support (non-Wasm): `casper-ffi-shim`, test support, and `veles-casper-rust-sdk` for JSON-RPC + SSE streams (std only).
 
 ## Crates
 - `veles-casper-contract-api`: main API surface, re-exports, and utilities.
 - `veles-casper-contract-macros`: procedural macros for entrypoints, args, and clients.
 - `veles-casper-contract-extras`: common contract building blocks.
 - `veles-casper-ffi-shim`: non-Wasm bindings for testing and tooling.
+- `veles-casper-rust-sdk`: host-side Rust SDK utilities (JSON-RPC wrapper, SSE listener/stream, transaction helpers).
 
 ## Repository layout
 - Crates live in `./crates`.

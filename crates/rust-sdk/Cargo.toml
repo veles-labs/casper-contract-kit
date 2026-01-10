@@ -1,0 +1,25 @@
+[package]
+name = "veles-casper-rust-sdk"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+
+[dependencies]
+casper-client = { workspace = true }
+casper-types = { workspace = true }
+async-stream = "0.3.6"
+clap = { version = "4.5.47", features = ["derive"] }
+futures = "0.3.31"
+reqwest-eventsource = "0.6.0"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = { version = "1.0.149", features = ["raw_value"] }
+secrecy = "0.10"
+tokio = "1.48.0"
+tracing = "0.1.41"
+url = "2.5.8"
+thiserror = "2"
+toml = "0.9"
+tempfile = "3"
+
+[dev-dependencies]
+tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }

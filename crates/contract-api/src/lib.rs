@@ -8,8 +8,6 @@ pub mod error;
 pub mod wasm_support;
 #[cfg(all(feature = "std", not(target_arch = "wasm32")))]
 pub use casper_binary_port;
-#[cfg(not(target_arch = "wasm32"))]
-pub use casper_client;
 pub use casper_contract;
 #[cfg(not(target_arch = "wasm32"))]
 pub use casper_engine_test_support;
@@ -30,7 +28,5 @@ pub mod collections;
 pub mod macro_support;
 pub mod named_key;
 pub mod prelude;
-#[cfg(all(not(target_arch = "wasm32"), feature = "std"))]
-pub mod sdk;
 pub mod typed_uref;
 pub mod utils;

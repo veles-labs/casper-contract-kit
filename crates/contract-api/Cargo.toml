@@ -17,13 +17,9 @@ veles-casper-ffi-shim = { workspace = true }
 casper-engine-test-support = { workspace = true }
 casper-execution-engine = { workspace = true }
 casper-storage = { workspace = true }
-casper-client = { workspace = true }
 casper-binary-port = { workspace = true }
 tokio = "1.48.0"
 thiserror = "2"
-toml = "0.9"
-tempfile = "3"
-secrecy = "0.10"
 
 [features]
 default = ["wasm_allocator", "wasm_panic_handler"]

@@ -3,6 +3,10 @@ name = "veles-casper-rust-sdk"
 version = "0.1.0"
 edition = "2024"
 license = "Apache-2.0"
+description = "Rust SDK for interacting with Casper nodes via JSON-RPC and SSE."
+documentation = "https://docs.rs/veles-casper-rust-sdk"
+homepage = "https://veleslabs.xyz"
+repository = "https://github.com/veles-labs/casper-contract-kit"
 
 [dependencies]
 casper-client = { workspace = true }

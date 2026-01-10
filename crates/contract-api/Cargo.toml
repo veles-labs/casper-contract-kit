@@ -3,6 +3,10 @@ name = "veles-casper-contract-api"
 version = "0.1.0"
 edition = "2024"
 license = "Apache-2.0"
+description = "Contract API and test utilities for Casper smart contracts."
+documentation = "https://docs.rs/veles-casper-contract-api"
+homepage = "https://veleslabs.xyz"
+repository = "https://github.com/veles-labs/casper-contract-kit"
 
 [dependencies]
 veles-casper-contract-macros = { workspace = true }

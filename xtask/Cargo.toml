@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2021"
 publish = false
 license = "Apache-2.0"
+description = "Workspace task runner for building and checking examples."
+documentation = "https://github.com/veles-labs/casper-contract-kit"
+homepage = "https://veleslabs.xyz"
+repository = "https://github.com/veles-labs/casper-contract-kit"
 
 [dependencies]
 clap = { version = "4.5.18", features = ["derive"] }

@@ -5,6 +5,10 @@ authors = ["Michał Papierski <michal@papierski.net>"]
 edition = "2024"
 license = "Apache-2.0"
 publish = false
+description = "Example Casper contract that calls the do-nothing stored contract."
+documentation = "https://github.com/veles-labs/casper-contract-kit"
+homepage = "https://veleslabs.xyz"
+repository = "https://github.com/veles-labs/casper-contract-kit"
 
 [lib]
 crate-type = ["cdylib", "rlib"]

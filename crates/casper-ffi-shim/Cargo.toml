@@ -3,6 +3,10 @@ name = "veles-casper-ffi-shim"
 version = "0.1.0"
 edition = "2024"
 license = "Apache-2.0"
+description = "FFI shim for Casper execution engine and test support."
+documentation = "https://docs.rs/veles-casper-ffi-shim"
+homepage = "https://veleslabs.xyz"
+repository = "https://github.com/veles-labs/casper-contract-kit"
 
 [dependencies]
 casper-types = { workspace = true }

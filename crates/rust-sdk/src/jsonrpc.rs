@@ -1,34 +1,22 @@
 //! JSONRPC client for interacting with a Casper network.
-use std::{
-    convert::TryInto,
-    fs,
-    sync::atomic::{AtomicI64, Ordering},
-};
-
-use casper_client::{
-    self, JsonRpcId, Verbosity, keygen,
-    rpcs::{
-        AccountIdentifier,
-        results::{GetChainspecResult, GetStateRootHashResult},
-    },
-};
+use casper_client::{self, JsonRpcId, Verbosity};
 pub use casper_client::{
     Error as CasperClientRpcError,
     cli::TransactionV1BuilderError,
-    rpcs::results::{
-        GetAccountResult, GetBlockResult, GetTransactionResult, PutTransactionResult,
-        SpeculativeExecTxnResult,
+    rpcs::{
+        AccountIdentifier,
+        common::BlockIdentifier,
+        results::{
+            GetAccountResult, GetBlockResult, GetChainspecResult, GetStateRootHashResult,
+            GetTransactionResult, PutTransactionResult, SpeculativeExecTxnResult,
+        },
     },
 };
 
-use casper_types::crypto::ErrorExt;
-use casper_types::{AsymmetricType, TransactionHash};
-pub use casper_types::{Digest, PublicKey, Transaction, account::AccountHash};
-use secrecy::SecretBox;
+use casper_types::{Digest, Transaction, TransactionHash, U512, crypto::ErrorExt};
+use rand::Rng;
 use thiserror::Error;
 use toml::Value as TomlValue;
-
-static RPC_COUNTER: AtomicI64 = AtomicI64::new(1);
 
 /// JSONRPC client for interacting with a Casper network sidecar instance.
 #[derive(Clone, Debug)]
@@ -82,21 +70,14 @@ impl CasperClient {
     /// Fetches the account information for the provided public key hex.
     pub async fn get_account(
         &self,
-        public_key_hex: &str,
+        account_identifier: AccountIdentifier,
     ) -> Result<Option<GetAccountResult>, CasperClientError> {
-        let public_key = PublicKey::from_hex(public_key_hex).map_err(|source| {
-            CasperClientError::InvalidPublicKey {
-                input: public_key_hex.to_string(),
-                source,
-            }
-        })?;
-
         match casper_client::get_account(
             next_rpc_id(),
             self.rpc_endpoint(),
             self.verbosity,
             None,
-            AccountIdentifier::PublicKey(public_key),
+            account_identifier,
         )
         .await
         {
@@ -131,9 +112,9 @@ impl CasperClient {
     /// Returns the balance (in motes) for the provided public key, if the account exists.
     pub async fn get_balance(
         &self,
-        public_key_hex: &str,
-    ) -> Result<Option<u64>, CasperClientError> {
-        let account = match self.get_account(public_key_hex).await? {
+        account_identifier: AccountIdentifier,
+    ) -> Result<Option<U512>, CasperClientError> {
+        let account = match self.get_account(account_identifier).await? {
             Some(result) => result,
             None => return Ok(None),
         };
@@ -151,14 +132,11 @@ impl CasperClient {
         .await?;
 
         let balance = response.result.balance_value;
-        let value: u64 = balance
-            .try_into()
-            .map_err(|_| CasperClientError::BalanceOverflow)?;
-        Ok(Some(value))
+        Ok(Some(balance))
     }
 
-    /// Submits a session WASM transaction and returns the transaction hash.
-    pub async fn put_session_transaction(
+    /// Submits a pre-built transaction and returns the transaction hash.
+    pub async fn put_transaction(
         &self,
         transaction: Transaction,
     ) -> Result<TransactionHash, CasperClientError> {
@@ -169,23 +147,7 @@ impl CasperClient {
             transaction,
         )
         .await?;
-
         Ok(response.result.transaction_hash)
-    }
-
-    /// Submits a pre-built transaction and returns the transaction hash.
-    pub async fn put_transaction(
-        &self,
-        transaction: Transaction,
-    ) -> Result<PutTransactionResult, CasperClientError> {
-        let response = casper_client::put_transaction(
-            next_rpc_id(),
-            self.rpc_endpoint(),
-            self.verbosity,
-            transaction,
-        )
-        .await?;
-        Ok(response.result)
     }
 
     /// Downloads and parses the chainspec TOML as `toml::Value`.
@@ -207,24 +169,6 @@ impl CasperClient {
             .and_then(TomlValue::as_str)
             .map(|value| value.to_string())
             .ok_or(CasperClientError::MissingNetworkName)
-    }
-
-    /// Generates a new Secp256k1 secret key and returns its PEM contents.
-    pub async fn keygen() -> Result<SecretBox<str>, CasperClientError> {
-        tokio::task::spawn_blocking(|| {
-            let tempdir = tempfile::tempdir()?;
-            let dir = tempdir.path().to_string_lossy();
-
-            keygen::generate_files(&dir, keygen::SECP256K1, true)?;
-
-            let secret_key_path = tempdir.path().join(keygen::SECRET_KEY_PEM);
-            let secret = fs::read_to_string(&secret_key_path)?;
-
-            let secret_box = SecretBox::new(secret.into_boxed_str());
-
-            Ok(secret_box)
-        })
-        .await?
     }
 
     /// Fetches the transaction details for the provided transaction hash.
@@ -258,10 +202,17 @@ impl CasperClient {
         Ok(response.result)
     }
 
-    pub async fn get_block(&self) -> Result<GetBlockResult, CasperClientError> {
-        let response =
-            casper_client::get_block(next_rpc_id(), self.rpc_endpoint(), self.verbosity, None)
-                .await?;
+    pub async fn get_block(
+        &self,
+        block_identifier: Option<BlockIdentifier>,
+    ) -> Result<GetBlockResult, CasperClientError> {
+        let response = casper_client::get_block(
+            next_rpc_id(),
+            self.rpc_endpoint(),
+            self.verbosity,
+            block_identifier,
+        )
+        .await?;
         Ok(response.result)
     }
 }
@@ -288,11 +239,6 @@ pub enum CasperClientError {
     TransactionBuild(#[from] TransactionV1BuilderError),
     #[error("blocking task error: {0}")]
     TaskJoin(#[from] tokio::task::JoinError),
-    #[error("failed to parse public key `{input}`: {source}")]
-    InvalidPublicKey {
-        input: String,
-        source: casper_types::crypto::Error,
-    },
 }
 
 impl From<CasperClientRpcError> for CasperClientError {
@@ -303,7 +249,8 @@ impl From<CasperClientRpcError> for CasperClientError {
 
 /// Generates the next JSONRPC ID.
 fn next_rpc_id() -> JsonRpcId {
-    JsonRpcId::from(RPC_COUNTER.fetch_add(1, Ordering::Relaxed))
+    let value: i64 = rand::rng().random();
+    JsonRpcId::from(value)
 }
 
 /// Parses the chainspec TOML from the RPC result.
@@ -351,8 +298,6 @@ fn is_missing_account_error(code: i64, message: &str) -> bool {
 }
 #[cfg(test)]
 mod tests {
-    use secrecy::ExposeSecret;
-
     use super::*;
 
     #[test]
@@ -361,10 +306,9 @@ mod tests {
         let id2 = next_rpc_id();
         let id3 = next_rpc_id();
 
-        // IDs should be sequential
-        assert!(matches!(id1, JsonRpcId::Number(_)));
-        assert!(matches!(id2, JsonRpcId::Number(_)));
-        assert!(matches!(id3, JsonRpcId::Number(_)));
+        // IDs should be unique
+        assert_ne!(id1, id2);
+        assert_ne!(id2, id3);
     }
 
     #[test]
@@ -473,13 +417,5 @@ mod tests {
 
         let error = CasperClientError::MissingNetworkName;
         assert_eq!(error.to_string(), "missing network name in chainspec");
-    }
-
-    #[tokio::test]
-    async fn test_casper_client_keygen() {
-        let secret_box = CasperClient::keygen().await.expect("keygen should succeed");
-        let secret = secret_box.expose_secret();
-        assert!(secret.starts_with("-----BEGIN EC PRIVATE KEY-----"));
-        assert!(secret.ends_with("-----END EC PRIVATE KEY-----\r\n"));
     }
 }

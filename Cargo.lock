@@ -2508,15 +2508,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "secrecy"
-version = "0.10.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e891af845473308773346dc847b2c23ee78fe442e0472ac50e22a18a93d3ae5a"
-dependencies = [
- "zeroize",
-]
-
-[[package]]
 name = "security-framework"
 version = "2.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3410,8 +3401,8 @@ dependencies = [
  "casper-types",
  "clap",
  "futures",
+ "rand 0.9.2",
  "reqwest-eventsource",
- "secrecy",
  "serde",
  "serde_json",
  "tempfile",

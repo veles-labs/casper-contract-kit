@@ -21,8 +21,7 @@ use toml::Value as TomlValue;
 /// JSONRPC client for interacting with a Casper network sidecar instance.
 #[derive(Clone, Debug)]
 pub struct CasperClient {
-    network_name: String,
-    rpc_endpoints: Vec<String>,
+    rpc_endpoint: String,
     verbosity: Verbosity,
 }
 
@@ -30,41 +29,21 @@ impl CasperClient {
     /// Creates a new client using the provided network name and RPC endpoints.
     ///
     /// At least one endpoint must be provided.
-    pub fn new<N, I, S>(network_name: N, rpc_endpoints: I) -> Result<Self, CasperClientError>
+    pub fn new<T>(rpc_endpoint: T) -> Self
     where
-        N: Into<String>,
-        I: IntoIterator<Item = S>,
-        S: Into<String>,
+        T: Into<String>,
     {
-        let endpoints: Vec<String> = rpc_endpoints
-            .into_iter()
-            .filter_map(|endpoint| {
-                let endpoint: String = endpoint.into();
-                normalize_node_address(&endpoint)
-            })
-            .collect();
-
-        if endpoints.is_empty() {
-            return Err(CasperClientError::MissingRpcEndpoints);
-        }
-
-        Ok(Self {
-            network_name: network_name.into(),
-            rpc_endpoints: endpoints,
+        Self {
+            rpc_endpoint: rpc_endpoint.into(),
             // Verbosity is set to low by default to avoid cluttering of stdout.
             verbosity: Verbosity::Low,
-        })
+        }
     }
 
     /// Returns the primary RPC endpoint configured for this client.
     pub fn rpc_endpoint(&self) -> &str {
         // safe: enforced in `new`.
-        self.rpc_endpoints.first().expect("endpoint must exist")
-    }
-
-    /// Network name associated with this client.
-    pub fn network_name(&self) -> &str {
-        &self.network_name
+        &self.rpc_endpoint
     }
 
     /// Fetches the account information for the provided public key hex.
@@ -219,8 +198,6 @@ impl CasperClient {
 
 #[derive(Error, Debug)]
 pub enum CasperClientError {
-    #[error("no RPC endpoints configured")]
-    MissingRpcEndpoints,
     #[error("casper client error: {0}")]
     Client(Box<CasperClientRpcError>),
     #[error("failed to parse chainspec response: {0}")]
@@ -258,27 +235,6 @@ fn parse_chainspec(result: &GetChainspecResult) -> Result<TomlValue, CasperClien
     toml::de::from_slice(result.chainspec_bytes.chainspec_bytes()).map_err(Into::into)
 }
 
-/// Normalizes a node address by removing trailing slashes and `/rpc` suffixes.
-fn normalize_node_address(endpoint: &str) -> Option<String> {
-    let trimmed = endpoint.trim();
-    if trimmed.is_empty() {
-        return None;
-    }
-
-    let without_trailing_slash = trimmed.trim_end_matches('/');
-    let cleaned = if let Some(stripped) = without_trailing_slash.strip_suffix("/rpc") {
-        stripped.trim_end_matches('/').to_owned()
-    } else {
-        without_trailing_slash.to_owned()
-    };
-
-    if cleaned.is_empty() {
-        None
-    } else {
-        Some(cleaned)
-    }
-}
-
 /// Determines if the provided error code and message indicate a missing account.
 ///
 /// Kind of hacky, but may be improved in the future with better error codes from the node.
@@ -312,46 +268,6 @@ mod tests {
     }
 
     #[test]
-    fn test_normalize_node_address_empty() {
-        assert_eq!(normalize_node_address(""), None);
-        assert_eq!(normalize_node_address("   "), None);
-    }
-
-    #[test]
-    fn test_normalize_node_address_trailing_slash() {
-        assert_eq!(
-            normalize_node_address("http://localhost:11101/"),
-            Some("http://localhost:11101".to_string())
-        );
-    }
-
-    #[test]
-    fn test_normalize_node_address_rpc_suffix() {
-        assert_eq!(
-            normalize_node_address("http://localhost:11101/rpc"),
-            Some("http://localhost:11101".to_string())
-        );
-        assert_eq!(
-            normalize_node_address("http://localhost:11101/rpc/"),
-            Some("http://localhost:11101".to_string())
-        );
-    }
-
-    #[test]
-    fn test_normalize_node_address_clean() {
-        assert_eq!(
-            normalize_node_address("http://localhost:11101"),
-            Some("http://localhost:11101".to_string())
-        );
-    }
-
-    #[test]
-    fn test_normalize_node_address_only_rpc() {
-        assert_eq!(normalize_node_address("/rpc"), None);
-        assert_eq!(normalize_node_address("rpc"), Some("rpc".into()));
-    }
-
-    #[test]
     fn test_is_missing_account_error_code() {
         assert!(is_missing_account_error(-32075, ""));
         assert!(!is_missing_account_error(-32076, ""));
@@ -369,46 +285,13 @@ mod tests {
     }
 
     #[test]
-    fn test_casper_client_new_empty_endpoints() {
-        let result = CasperClient::new("testnet", Vec::<String>::new());
-        assert!(matches!(
-            result,
-            Err(CasperClientError::MissingRpcEndpoints)
-        ));
-    }
-
-    #[test]
-    fn test_casper_client_new_filters_empty() {
-        let result = CasperClient::new("testnet", vec!["", "  ", "/rpc"]);
-        assert!(matches!(
-            result,
-            Err(CasperClientError::MissingRpcEndpoints)
-        ));
-    }
-
-    #[test]
     fn test_casper_client_new_success() {
-        let client = CasperClient::new("testnet", vec!["http://localhost:11101"])
-            .expect("should create client");
-        assert_eq!(client.network_name(), "testnet");
-        assert_eq!(client.rpc_endpoint(), "http://localhost:11101");
-    }
-
-    #[test]
-    fn test_casper_client_new_normalizes_endpoints() {
-        let client = CasperClient::new(
-            "testnet",
-            vec!["http://localhost:11101/rpc/", "http://other:8888/", ""],
-        )
-        .expect("should create client");
+        let client = CasperClient::new("http://localhost:11101");
         assert_eq!(client.rpc_endpoint(), "http://localhost:11101");
     }
 
     #[test]
     fn test_casper_client_error_display() {
-        let error = CasperClientError::MissingRpcEndpoints;
-        assert_eq!(error.to_string(), "no RPC endpoints configured");
-
         let error = CasperClientError::BalanceOverflow;
         assert_eq!(error.to_string(), "balance value exceeds u64 range");
 

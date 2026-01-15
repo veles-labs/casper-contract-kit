@@ -130,7 +130,7 @@ impl CasperClient {
     }
 
     /// Fetches the transaction status for the provided transaction hash.
-    pub async fn get_transaction_status(
+    pub async fn get_transaction(
         &self,
         transaction_hash: TransactionHash,
         finalized_approvals: bool,
@@ -165,22 +165,6 @@ impl CasperClient {
             .and_then(TomlValue::as_str)
             .map(|value| value.to_string())
             .ok_or(CasperClientError::MissingNetworkName)
-    }
-
-    /// Fetches the transaction details for the provided transaction hash.
-    pub async fn get_transaction(
-        &self,
-        transaction_hash: TransactionHash,
-    ) -> Result<GetTransactionResult, CasperClientError> {
-        let response = casper_client::get_transaction(
-            next_rpc_id(),
-            self.rpc_endpoint(),
-            self.verbosity,
-            transaction_hash,
-            true,
-        )
-        .await?;
-        Ok(response.result)
     }
 
     /// Performs a speculative execution of the provided transaction.

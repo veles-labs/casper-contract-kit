@@ -5,6 +5,7 @@ pub(crate) mod event;
 extern crate alloc;
 
 use alloc::collections::BTreeMap;
+use alloc::{format, string::String};
 
 use veles_casper_contract_api::prelude::*;
 
@@ -33,6 +34,29 @@ pub mod contract {
 
             Ok(())
         }
+    }
+
+    #[casper(export)]
+    pub fn hello(who: String) -> Result<String, ApiError> {
+        if who.is_empty() {
+            return Err(ApiError::User(50001));
+        }
+
+        Ok(format!("Hello, {who}!"))
+    }
+
+    #[casper(export)]
+    pub fn add(lhs: u64, rhs: u64) -> Result<u64, ApiError> {
+        Ok(lhs + rhs)
+    }
+
+    #[casper(export)]
+    pub fn mapping() -> BTreeMap<String, u64> {
+        let mut map = BTreeMap::new();
+        map.insert("A".into(), 1);
+        map.insert("B".into(), 2);
+        map.insert("C".into(), 3);
+        map
     }
 }
 

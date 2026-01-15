@@ -129,6 +129,23 @@ impl CasperClient {
         Ok(response.result.transaction_hash)
     }
 
+    /// Fetches the transaction status for the provided transaction hash.
+    pub async fn get_transaction_status(
+        &self,
+        transaction_hash: TransactionHash,
+        finalized_approvals: bool,
+    ) -> Result<GetTransactionResult, CasperClientError> {
+        let response = casper_client::get_transaction(
+            next_rpc_id(),
+            self.rpc_endpoint(),
+            self.verbosity,
+            transaction_hash,
+            finalized_approvals,
+        )
+        .await?;
+        Ok(response.result)
+    }
+
     /// Downloads and parses the chainspec TOML as `toml::Value`.
     ///
     /// NOTE: This API may change in future and provide a deserialized `Chainspec` struct instead.
